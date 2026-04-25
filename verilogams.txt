@@ -1,0 +1,65 @@
+`include "disciplines.vams"
+
+module sar10b (
+    EN, CLK, RDY, CMP_P, CMP_N,
+    CKS, CKSB, CF, SWP, SWN, DATA, CKO
+);
+    // Port declarations – all electrical to interface with Spectre
+    input  EN, CLK, RDY, CMP_P, CMP_N;
+    output CKS, CKSB;
+    output [0:9] CF, SWP, SWN, DATA;
+    output CKO;
+    
+    electrical EN, CLK, RDY, CMP_P, CMP_N;
+    electrical CKS, CKSB;
+    electrical [0:9] CF, SWP, SWN, DATA;
+    electrical CKO;
+
+    // Internal digital wires linking to the pure-Verilog core
+    wire       en_dig, clk_dig, rdy_dig, cmp_p_dig, cmp_n_dig;
+    wire       cks_dig, cksb_dig, cko_dig;
+    wire [0:9] cf_dig, swp_dig, swn_dig, data_dig;
+
+    // ---- Conversion: Electrical to Digital (Inputs) ----
+    // Assuming 1.2V logic. Adjust the 0.6V threshold if VDD changes.
+    assign en_dig    = (V(EN)    > 0.6); 
+    assign clk_dig   = (V(CLK)   > 0.6);
+    assign rdy_dig   = (V(RDY)   > 0.6);
+    assign cmp_p_dig = (V(CMP_P) > 0.6);
+    assign cmp_n_dig = (V(CMP_N) > 0.6);
+
+    // ---- Conversion: Digital to Electrical (Outputs) ----
+    // Uses the transition() filter inside an analog block to prevent 
+    // infinite dv/dt simulator crashes. Slew rate set to 10ps.
+    integer i;
+    analog begin
+        V(CKS)  <+ transition(cks_dig  ? 1.2 : 0.0, 0, 10p, 10p);
+        V(CKSB) <+ transition(cksb_dig ? 1.2 : 0.0, 0, 10p, 10p);
+        V(CKO)  <+ transition(cko_dig  ? 1.2 : 0.0, 0, 10p, 10p);
+
+        for (i = 0; i < 10; i = i + 1) begin
+            V(CF[i])   <+ transition(cf_dig[i]   ? 1.2 : 0.0, 0, 10p, 10p);
+            V(SWP[i])  <+ transition(swp_dig[i]  ? 1.2 : 0.0, 0, 10p, 10p);
+            V(SWN[i])  <+ transition(swn_dig[i]  ? 1.2 : 0.0, 0, 10p, 10p);
+            V(DATA[i]) <+ transition(data_dig[i] ? 1.2 : 0.0, 0, 10p, 10p);
+        end
+    end
+
+    // ---- Instantiate the Pure-Verilog Core ----
+    // This is the unmodified, synthesizable module destined for your Zynq Ultrascale.
+    sar10b_core core (
+        .EN    (en_dig),
+        .CLK   (clk_dig),
+        .RDY   (rdy_dig),
+        .CMP_P (cmp_p_dig),
+        .CMP_N (cmp_n_dig),
+        .CKS   (cks_dig),
+        .CKSB  (cksb_dig),
+        .CF    (cf_dig),
+        .SWP   (swp_dig),
+        .SWN   (swn_dig),
+        .DATA  (data_dig),
+        .CKO   (cko_dig)
+    );
+
+endmodule
